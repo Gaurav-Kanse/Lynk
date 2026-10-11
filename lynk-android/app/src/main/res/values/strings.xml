@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Lynk</string>
+    <string name="service_discovery_title">Lynk Devices</string>
+    <string name="scan_button">Scan Network</string>
+    <string name="connect_button">Connect (HELLO)</string>
+    <string name="unencrypted_warning">Initial TCP connection is unauthenticated and unencrypted.</string>
+</resources>

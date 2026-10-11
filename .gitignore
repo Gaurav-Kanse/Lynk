@@ -1,0 +1,14 @@
+# Rust build output
+**/target/
+
+# Gradle / Android build output
+**/.gradle/
+**/build/
+**/local.properties
+**/*.apk
+**/*.aab
+
+# IDE & OS
+**/.idea/
+**/*.iml
+.DS_Store

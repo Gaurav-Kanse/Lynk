@@ -1,0 +1,10 @@
+[package]
+name = "lynk-daemon"
+version = "0.1.0"
+edition = "2024"
+description = "Linux daemon for the Lynk Android-to-Linux bridge"
+license = "MIT"
+
+[dependencies]
+mdns-sd = "0.21.5"
+tokio = { version = "1", features = ["full"] }
