@@ -1,6 +1,8 @@
+
 package com.lynk.android.network
 
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
@@ -12,10 +14,8 @@ import java.net.Socket
 import java.net.SocketTimeoutException
 
 private const val TAG = "LynkClient"
+private const val EXPECTED_RESPONSE = "LYNK_HELLO 1"
 
-/**
- * Result data holder for a TCP connection handshake.
- */
 data class HandshakeResult(
     val request: String,
     val response: String,
@@ -24,81 +24,92 @@ data class HandshakeResult(
     val targetPort: Int
 )
 
-/**
- * Client for opening short-lived TCP socket connections to the Lynk daemon.
- *
- * NOTE: The initial TCP connection is UNAUTHENTICATED and UNENCRYPTED (Plaintext).
- * Do not transmit sensitive data over this channel.
- */
 class LynkClient(
     private val defaultTimeoutMs: Int = 5000
 ) {
-
-    /**
-     * Connects to the Lynk daemon at [host]:[port], sends "HELLO_LYNK\n",
-     * reads a single-line response (expected: "LYNK_HELLO 1"), and closes the socket.
-     *
-     * Executed safely on Dispatchers.IO with strict connection and read timeouts.
-     */
     suspend fun sendHello(
         host: String,
         port: Int,
         timeoutMs: Int = defaultTimeoutMs
     ): Result<HandshakeResult> = withContext(Dispatchers.IO) {
-        val startTime = System.currentTimeMillis()
-        var socket: Socket? = null
+        require(host.isNotBlank()) { "Host cannot be empty" }
+        require(port in 1..65535) { "Port must be between 1 and 65535" }
+        require(timeoutMs > 0) { "Timeout must be positive" }
+
+        val startedAt = System.nanoTime()
 
         try {
-            Log.d(TAG, "Connecting to $host:$port with timeout ${timeoutMs}ms...")
-            socket = Socket()
-            // 1. Establish connection with timeout
-            socket.connect(InetSocketAddress(host, port), timeoutMs)
-            socket.soTimeout = timeoutMs
+            Socket().use { socket ->
+                Log.d(TAG, "Connecting to $host:$port")
 
-            val writer = BufferedWriter(OutputStreamWriter(socket.getOutputStream(), Charsets.UTF_8))
-            val reader = BufferedReader(InputStreamReader(socket.getInputStream(), Charsets.UTF_8))
+                socket.connect(
+                    InetSocketAddress(host, port),
+                    timeoutMs
+                )
+                socket.soTimeout = timeoutMs
 
-            // 2. Transmit HELLO command
-            val request = "HELLO_LYNK"
-            writer.write("$request\n")
-            writer.flush()
-            Log.d(TAG, "Sent: $request")
+                val writer = BufferedWriter(
+                    OutputStreamWriter(
+                        socket.getOutputStream(),
+                        Charsets.UTF_8
+                    )
+                )
 
-            // 3. Receive single-line response from daemon
-            val responseLine = reader.readLine()
-            val latency = System.currentTimeMillis() - startTime
+                val reader = BufferedReader(
+                    InputStreamReader(
+                        socket.getInputStream(),
+                        Charsets.UTF_8
+                    )
+                )
 
-            if (responseLine == null) {
-                Log.w(TAG, "Server closed socket immediately without response")
-                return@withContext Result.failure(
-                    IllegalStateException("Server ($host:$port) closed the connection without responding.")
+                val request = "HELLO_LYNK"
+                writer.write("$request\n")
+                writer.flush()
+
+                val response = reader.readLine()
+                    ?: throw IllegalStateException(
+                        "Server closed the connection without responding"
+                    )
+
+                if (response.length > 4096) {
+                    throw IllegalStateException(
+                        "Server response exceeded the allowed length"
+                    )
+                }
+
+                if (response.trim() != EXPECTED_RESPONSE) {
+                    throw IllegalStateException(
+                        "Unexpected Lynk protocol response: $response"
+                    )
+                }
+
+                val latencyMs =
+                    (System.nanoTime() - startedAt) / 1_000_000
+
+                Log.d(TAG, "Handshake successful in ${latencyMs}ms")
+
+                Result.success(
+                    HandshakeResult(
+                        request = request,
+                        response = response.trim(),
+                        latencyMs = latencyMs,
+                        targetAddress = host,
+                        targetPort = port
+                    )
                 )
             }
-
-            Log.d(TAG, "Received: $responseLine (latency: ${latency}ms)")
-            Result.success(
-                HandshakeResult(
-                    request = request,
-                    response = responseLine.trim(),
-                    latencyMs = latency,
-                    targetAddress = host,
-                    targetPort = port
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: SocketTimeoutException) {
+            Log.e(TAG, "Connection timed out", error)
+            Result.failure(
+                SocketTimeoutException(
+                    "Connection timed out after ${timeoutMs}ms ($host:$port)"
                 )
             )
-        } catch (e: SocketTimeoutException) {
-            Log.e(TAG, "Connection/Read timed out connecting to $host:$port", e)
-            Result.failure(SocketTimeoutException("Connection timed out after ${timeoutMs}ms ($host:$port)"))
-        } catch (e: Exception) {
-            Log.e(TAG, "TCP connection failed to $host:$port", e)
-            Result.failure(e)
-        } finally {
-            // 4. Reliably close socket
-            try {
-                socket?.close()
-                Log.d(TAG, "Socket closed reliably")
-            } catch (closeEx: Exception) {
-                Log.w(TAG, "Error closing socket: ${closeEx.message}")
-            }
+        } catch (error: Exception) {
+            Log.e(TAG, "Handshake failed", error)
+            Result.failure(error)
         }
     }
 }

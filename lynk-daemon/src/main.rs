@@ -9,7 +9,7 @@ const TCP_PORT: u16 = 5000;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 1. Start the TCP server.
+
     let address = std::env::var("LYNK_BIND").unwrap_or_else(|_| "0.0.0.0:5000".to_string());
 
     let listener = TcpListener::bind(&address).await?;
@@ -19,7 +19,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("==================================");
     println!("TCP listener: {address}");
 
-    // 2. Start the mDNS daemon.
     let mdns = ServiceDaemon::new()?;
 
     // Listen for events reported by the mDNS worker.
@@ -39,8 +38,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    // 3. Describe the service we want to advertise.
-    //
     //    Passing an empty string for the IP address means "no hardcoded
     //    addresses".  Calling `enable_addr_auto()` tells the library to
     //    discover and advertise the addresses of every active interface
