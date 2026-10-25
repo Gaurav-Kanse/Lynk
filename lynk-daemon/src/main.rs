@@ -38,9 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    //    Passing an empty string for the IP address means "no hardcoded
-    //    addresses".  Calling `enable_addr_auto()` tells the library to
-    //    discover and advertise the addresses of every active interface
+    //    Passing an empty string for the IP address means "no hardcoded addresses".  Calling `enable_addr_auto()` tells the library to discover and advertise the addresses of every active interface
     //    automatically and to keep them updated if interfaces change.
     let properties = [("version", PROTOCOL_VERSION), ("protocol", "lynk-tcp")];
 
@@ -48,7 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         SERVICE_TYPE,
         SERVICE_NAME,
         "lynk-host.local.",
-        "",
+        "", 
         TCP_PORT,
         &properties[..],
     )?
